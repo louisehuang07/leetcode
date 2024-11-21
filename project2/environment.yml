@@ -1,0 +1,12 @@
+name: image_viewer
+channels:
+  - defaults
+dependencies:
+  - python=3.8  
+  - numpy
+  - opencv
+  - matplotlib
+  - base64
+  - flet
+# conda env create -f environment.yml
+# conda activate image_viewer
