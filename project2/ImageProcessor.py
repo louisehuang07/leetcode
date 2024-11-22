@@ -416,19 +416,28 @@ class ImageProcessorApp:
         # move to center
         dft_shift = np.fft.fftshift(dft)
 
+        
+        # mask or filter
+        u, v = np.meshgrid(np.arange(rows), np.arange(cols), indexing='ij')
+        d = np.sqrt((u - crow) ** 2 + (v - ccol) ** 2)  # distance
+
         # create low-filter mask
-        mask = np.zeros((rows, cols), dtype=np.uint8)
-        for u in range(rows):
-            for v in range(cols):
+        # mask = np.zeros((rows, cols), dtype=np.float64)
+        # for u in range(rows):
+            # for v in range(cols):
                 # distance
-                d = np.sqrt((u - crow) ** 2 + (v - ccol) ** 2)
-                if filter_type == 'ideal':
-                    mask[u, v] = 1 if d <= d0 else 0
-                elif filter_type == 'butterworth':
-                    n = 2
-                    mask[u, v] = 1 if 1 / (1 + (d / d0) ** (2 * n)) <= 0.5 else 0
-                elif filter_type == 'gaussian':
-                    mask[u, v] = 1 if np.exp(-(d ** 2) / (2 * (d0 ** 2))) <= 0.5 else 0
+                # d = np.sqrt((u - crow) ** 2 + (v - ccol) ** 2)
+        if filter_type == 'ideal':
+            # mask[u, v] = 1 if d <= d0 else 0
+            mask = (d <= d0).astype(np.float64)
+        elif filter_type == 'butterworth':
+            n = 2
+            # mask[u, v] = 1 / (1 + (d / d0) ** (2 * n)) # <= 0.5 else 0
+            mask = 1 / (1 + (d / d0) ** (2 * n))
+        elif filter_type == 'gaussian':
+            # mask[u, v] = np.exp(-(d ** 2) / (2 * (d0 ** 2))) # <= 0.5 else 0
+            mask = np.exp(-(d ** 2) / (2 * (d0 ** 2)))
+
         
         # if this is high-pass-filter
         if highpass:
