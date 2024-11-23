@@ -5,23 +5,16 @@ def resize(original_image, scale_factor):
     "Resize to New Height and Width with Bilinear Neighbor Interpolation"
     new_width = int(original_image.shape[1] * scale_factor)
     new_height = int(original_image.shape[0] * scale_factor)
-    # print('new_height',new_height)
-    # print('new_width',new_width)
-    # print('scale_factor',scale_factor)
 
     height, width = original_image.shape[:2]
-    # print('height', height)
-    # print('width', width)
+
     # target image
-    resized_image = np.zeros((new_height, new_width, original_image.shape[2]), dtype=original_image.dtype)
+    resized_image = np.zeros((new_height, new_width, original_image.shape[2]), 
+                             dtype=original_image.dtype)
 
     # ratio
     ratio_row = height / new_height
     ratio_col = width / new_width
-    # print('ratio_row', ratio_row)
-    # print('ratio_col', ratio_col)
-    # print('scale_factor',scale_factor)
-    
 
     for i in range(new_height):
         for j in range(new_width):
@@ -174,7 +167,7 @@ def warpAffine_m(image, shear_angle):
     # inv.shear_matrix
     inv_shear_matrix = np.linalg.inv(
         np.vstack([shear_matrix, [0, 0, 1]])
-    )[:2, :]  # 截取前两行
+    )[:2, :]  
     
     # every pixel
     for y_new in range(new_h):
@@ -358,13 +351,15 @@ def robert_opt(image):
     
     # output image
     output_image = np.zeros_like(image, dtype=np.float32)
+    # single channel image to get grad_image
+    image_single_channel = grayscale_single_channel(image)
     
     # convolutional operation
     for i in range(1, height - 1):
         for j in range(1, width - 1):
             # gradient along x & y
-            grad_x = np.sum(kernel_x * image[i:i+2, j:j+2])
-            grad_y = np.sum(kernel_y * image[i:i+2, j:j+2])
+            grad_x = np.sum(kernel_x * image_single_channel[i:i+2, j:j+2])
+            grad_y = np.sum(kernel_y * image_single_channel[i:i+2, j:j+2])
             
             # Gradient Amplitude
             grad_mag = np.sqrt(grad_x**2 + grad_y**2)
@@ -373,39 +368,86 @@ def robert_opt(image):
             output_image[i, j] = grad_mag
     
     # Convert the result to uint8 type
-    output_image = np.clip(output_image, 0, 255).astype(np.uint8)
-    
-    return output_image
+    grad_image = np.clip(output_image, 0, 255).astype(np.uint8)
+    sharpened_image = addWeighted_m(image, grad_image)
 
+    # make sure image in [0,255]
+    image = np.clip(sharpened_image, 0, 255).astype(np.uint8)
+    return image
+
+# def sobel_opt(image):
+#     # def kernel of Robert
+#     kernel_x = np.array([[1, 0, -1], [2, 0, -2], [1, 0, -1]], dtype=np.float32)
+#     kernel_y = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]], dtype=np.float32)
+    
+#     # size of image
+#     height, width = image.shape[:2]
+    
+#     # initialize output image
+#     output_image = np.zeros_like(image, dtype=np.float32)
+#     # single channel image to get grad_image
+#     image_single_channel = grayscale_single_channel(image)
+
+#     # Perform convolution on the image
+#     for i in range(1, height - 1):
+#         for j in range(1, width - 1):
+#             # Calculate the gradient in the x and y directions
+#             grad_x = np.sum(kernel_x * image_single_channel[i-1:i+2, j-1:j+2])
+#             grad_y = np.sum(kernel_y * image_single_channel[i-1:i+2, j-1:j+2])
+            
+#             # Gradient Amplitude
+#             grad_mag = np.sqrt(grad_x**2 + grad_y**2)
+            
+#             # Replace image pixel values
+#             output_image[i, j] = grad_mag
+    
+#     # Convert the result to uint8 type
+#     grad_image = np.clip(output_image, 0, 255).astype(np.uint8)
+#     sharpened_image = addWeighted_m(image, grad_image)
+
+#     # make sure image in [0,255]
+#     image = np.clip(sharpened_image, 0, 255).astype(np.uint8)
+#     return image
 def sobel_opt(image):
-    # def kernel of Robert
-    kernel_x = np.array([[1, 0, -1], [2, 0, -2], [1, 0, -1]], dtype=np.float32)
-    kernel_y = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]], dtype=np.float32)
-    
-    # size of image
-    height, width = image.shape[:2]
-    
-    # initialize output image
-    output_image = np.zeros_like(image, dtype=np.float32)
-    
-    # Perform convolution on the image
-    for i in range(1, height - 1):
-        for j in range(1, width - 1):
-            # Calculate the gradient in the x and y directions
-            grad_x = np.sum(kernel_x * image[i-1:i+2, j-1:j+2])
-            grad_y = np.sum(kernel_y * image[i-1:i+2, j-1:j+2])
-            
-            # Gradient Amplitude
-            grad_mag = np.sqrt(grad_x**2 + grad_y**2)
-            
-            # Replace image pixel values
-            output_image[i, j] = grad_mag
-    
-    # Convert the result to uint8 type
-    output_image = np.clip(output_image, 0, 255).astype(np.uint8)
-    
-    return output_image
-    
+    # Sobel convolutional kernel
+    kernel_x = np.array([[-1, 0, 1],
+                            [-2, 0, 2],
+                            [-1, 0, 1]], dtype=np.float32)
+    kernel_y = np.array([[-1, -2, -1],
+                            [0,  0,  0],
+                            [1,  2,  1]], dtype=np.float32)
+
+    # image size
+    h, w, c = image.shape
+
+    # edge image
+    edge_image = np.zeros((h , w , c), dtype=np.uint8)
+
+    # per channel
+    for ch in range(c):
+        # single channel
+        channel = image[:, :, ch]
+
+        # initialize
+        grad_x = np.zeros((h , w ), dtype=np.float32)
+        grad_y = np.zeros((h , w ), dtype=np.float32)
+
+        # convolution
+        for i in range(1, h - 1):
+            for j in range(1, w - 1):
+                region = channel[i - 1:i + 2, j - 1:j + 2]  # 提取 3x3 区域
+                grad_x[i - 1, j - 1] = np.sum(region * kernel_x)  # 水平梯度
+                grad_y[i - 1, j - 1] = np.sum(region * kernel_y)  # 垂直梯度
+
+        # gradient, normalize to [0, 255]
+        gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+        gradient_magnitude = (gradient_magnitude / gradient_magnitude.max() * 255).astype(np.uint8)
+
+        # store to channel
+        edge_image[:, :, ch] = gradient_magnitude
+    ret = addWeighted_m(image, edge_image)
+    return ret
+
 
 def laplace_opt(image):
     # def kernel of Laplacian
@@ -424,6 +466,28 @@ def laplace_opt(image):
             output_image[i, j] = np.sum(kernel * image[i-1:i+2, j-1:j+2])
     
     # Convert the result to uint8 type
-    output_image = np.clip(output_image, 0, 255).astype(np.uint8)
+    grad_image = np.clip(output_image, 0, 255).astype(np.uint8)
+    sharpened_image = addWeighted_m(image, grad_image)
+
+    return sharpened_image
+
+def addWeighted_m(image, grad_image):
+    # \alpha * image + \beta * grad_image + \gamma
+    alpha = 1
+    beta = 1
+    gamma = 0
+    if image.shape != grad_image.shape:
+        print('image.shape=', image.shape)
+        print('grad_image.shape=', grad_image.shape)
+
+        raise ValueError("The shape of the two images must match!")
     
-    return output_image
+    # float 32
+    image = image.astype(np.float32)
+    grad_image = grad_image.astype(np.float32)
+    # linear formular
+    result = alpha * image + beta * grad_image + gamma
+    result = np.clip(result,0,255).astype(np.uint8)
+
+    return result
+

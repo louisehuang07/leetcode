@@ -25,7 +25,7 @@ class ImageProcessorApp:
         self.time_records = []
 
         self.time_display = ft.Text(
-            value="Last 10 operation times:\n",
+            value="Last 1 operation times:\n",
             size=16,
             style=ft.TextStyle(font_family="Consolas"),
         )
@@ -39,11 +39,11 @@ class ImageProcessorApp:
         return base64.b64encode(base64_image).decode('utf-8')
 
     def add_time_record(self, operation_name, time_taken):
-        if len(self.time_records) >= 10:
+        if len(self.time_records) >= 1:
             self.time_records.pop(0)
         self.time_records.append(f"{operation_name}: {time_taken:.4f} seconds")
         time_text = "\n".join(self.time_records)
-        self.time_display.value = f"Last 10 operation times:\n{time_text}"
+        self.time_display.value = f"Last 1 operation times:\n{time_text}"
         self.time_display.update()
 
 
@@ -60,8 +60,7 @@ class ImageProcessorApp:
         new_width = int(self.original_image.shape[1] * self.scale_factor)
         new_height = int(self.original_image.shape[0] * self.scale_factor)
         start_time = time.time()
-        # scaled_image = resize(self.original_image, self.scale_factor)
-        # self.image_src.src_base64 = self.to_base64(scaled_image)
+
         self.image = cv2.resize(self.original_image, (new_width, new_height))
         self.image_src.src_base64 = self.to_base64(self.image)
         self.image_src.update()
@@ -115,12 +114,9 @@ class ImageProcessorApp:
     # Manually marked as '_'
     def update_scaled_image_(self):
         check_if_image_exist(self.original_image)
-        # new_width = int(self.original_image.shape[1] * self.scale_factor)
-        # new_height = int(self.original_image.shape[0] * self.scale_factor)
         
         start_time = time.time()
-        # scaled_image = resize(self.original_image, self.scale_factor)
-        # self.image_src.src_base64 = self.to_base64(scaled_image)
+
         self.image = resize(self.original_image, self.scale_factor)
         self.image_src.src_base64 = self.to_base64(self.image)
         self.image_src.update()
@@ -365,8 +361,11 @@ class ImageProcessorApp:
 
         # convert to uint8
         grad = cv2.magnitude(grad_x, grad_y)
-        self.image = np.uint8(np.clip(grad, 0, 255))
-        
+        grad_image = np.uint8(np.clip(grad, 0, 255))
+        sharpened_image = cv2.addWeighted(self.image, 1, grad_image, 1, 0)
+
+        # make sure image in [0,255]
+        self.image = np.clip(sharpened_image, 0, 255).astype(np.uint8)
         # update page
         self.image_src.src_base64 = self.to_base64(self.image)
         self.image_src.update()
@@ -380,12 +379,25 @@ class ImageProcessorApp:
 
         # convert to uint8
         grad = cv2.magnitude(grad_x, grad_y)
-        self.image = np.uint8(np.clip(grad, 0, 255))
+        grad_image = np.uint8(np.clip(grad, 0, 255))
+
+        # grayscale
+        # gray_image = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+        # gray_image = cv2.cvtColor(gray_image, cv2.COLOR_GRAY2BGR)
+
+        # print('grad_image',grad_image.shape)
+        # print('gray_image',gray_image.shape)
+
+        # origin image + edge
+        sharpened_image = cv2.addWeighted(self.image, 1, grad_image, 1, 0)
+
+        # make sure image in [0,255]
+        self.image = np.clip(sharpened_image, 0, 255).astype(np.uint8)
 
         # update page
         self.image_src.src_base64 = self.to_base64(self.image)
         self.image_src.update()
-        self.add_time_record("Sharpen Sebel Operator", time.time() - start_time)
+        self.add_time_record("Sharpen Sobel Operator", time.time() - start_time)
     
     def sharpen_laplace(self, e):
         check_if_image_exist(self.image)
@@ -393,9 +405,12 @@ class ImageProcessorApp:
 
         # gradient (oder 2)
         laplacian = cv2.Laplacian(self.image, cv2.CV_64F, ksize=3)
+        grad_image = np.uint8(np.clip(laplacian, 0, 255))
+
+        sharpened_image = cv2.addWeighted(self.image, 1, grad_image, 1, 0)
 
         # convert to uint8
-        self.image = np.uint8(np.clip(np.abs(laplacian), 0, 255))
+        self.image = np.uint8(np.clip(np.abs(sharpened_image), 0, 255))
         # update page
         self.image_src.src_base64 = self.to_base64(self.image)
         self.image_src.update()
@@ -412,33 +427,23 @@ class ImageProcessorApp:
         crow, ccol = rows // 2, cols // 2
         # calculate FFT to frequency domain
         dft = np.fft.fft2(self.image)
-
+ 
         # move to center
         dft_shift = np.fft.fftshift(dft)
 
-        
         # mask or filter
         u, v = np.meshgrid(np.arange(rows), np.arange(cols), indexing='ij')
         d = np.sqrt((u - crow) ** 2 + (v - ccol) ** 2)  # distance
 
         # create low-filter mask
-        # mask = np.zeros((rows, cols), dtype=np.float64)
-        # for u in range(rows):
-            # for v in range(cols):
-                # distance
-                # d = np.sqrt((u - crow) ** 2 + (v - ccol) ** 2)
         if filter_type == 'ideal':
-            # mask[u, v] = 1 if d <= d0 else 0
             mask = (d <= d0).astype(np.float64)
         elif filter_type == 'butterworth':
             n = 2
-            # mask[u, v] = 1 / (1 + (d / d0) ** (2 * n)) # <= 0.5 else 0
             mask = 1 / (1 + (d / d0) ** (2 * n))
         elif filter_type == 'gaussian':
-            # mask[u, v] = np.exp(-(d ** 2) / (2 * (d0 ** 2))) # <= 0.5 else 0
             mask = np.exp(-(d ** 2) / (2 * (d0 ** 2)))
 
-        
         # if this is high-pass-filter
         if highpass:
             mask = 1 - mask
@@ -449,7 +454,9 @@ class ImageProcessorApp:
         # transform to space domain
         dft_ishift = np.fft.ifftshift(dft_filtered)
         img_filtered = np.fft.ifft2(dft_ishift)
-        return  np.abs(img_filtered)
+
+        return np.abs(img_filtered)
+
 
 
     def frequency_low_pass_ideal(self, e):
@@ -547,7 +554,7 @@ class ImageProcessorApp:
         # update page
         self.image_src.src_base64 = self.to_base64(self.image)
         self.image_src.update()
-        self.add_time_record("Bilinear Shear", time.time() - start_time)
+        self.add_time_record("Bilinear Shear Manually", time.time() - start_time)
     
     def shear_up_m(self, e):
         check_if_image_exist(self.image)
@@ -583,7 +590,7 @@ class ImageProcessorApp:
         # update page
         self.image_src.src_base64 = self.to_base64(self.image)
         self.image_src.update()
-        self.add_time_record("Bilinear Perspective", time.time() - start_time)
+        self.add_time_record("Bilinear Perspective Manually", time.time() - start_time)
     
     def histogram_m(self, e):
         check_if_image_exist(self.image)
@@ -605,7 +612,7 @@ class ImageProcessorApp:
         # update page
         self.image_src.src_base64 = self.to_base64(self.image)
         self.image_src.update()
-        self.add_time_record("Histogram Equalization", time.time() - start_time)
+        self.add_time_record("Histogram Equalization  Manually", time.time() - start_time)
     
     def median_m(self, e):
         check_if_image_exist(self.image)
@@ -617,44 +624,45 @@ class ImageProcessorApp:
         # update page
         self.image_src.src_base64 = self.to_base64(self.image)
         self.image_src.update()
-        self.add_time_record("Median", time.time() - start_time)
+        self.add_time_record("Median Manually", time.time() - start_time)
     
     def sharpen_robert_m(self, e):
         check_if_image_exist(self.image)
         start_time = time.time()
 
         # convert to grayscale image
-        image = grayscale_single_channel(self.image)
-        self.image = robert_opt(image)
-
+        # image = grayscale_single_channel(self.image)
+        # self.image = robert_opt(self.image)
+        self.image = robert_opt(self.image)
         # update page
         self.image_src.src_base64 = self.to_base64(self.image)
         self.image_src.update()
-        self.add_time_record("Sharpen Robert", time.time() - start_time)
+        self.add_time_record("Sharpen Robert  Manually", time.time() - start_time)
     
     def sharpen_sobel_m(self, e):
         check_if_image_exist(self.image)
         start_time = time.time()
         
-        self.image = grayscale_single_channel(self.image)
+        # self.image = grayscale_single_channel(self.image)
+        # self.image = sobel_opt(self.image)
         self.image = sobel_opt(self.image)
         
         # update page
         self.image_src.src_base64 = self.to_base64(self.image)
         self.image_src.update()
-        self.add_time_record("Sharpen Sobel", time.time() - start_time)
+        self.add_time_record("Sharpen Sobel Manually", time.time() - start_time)
     
     def sharpen_laplace_m(self, e):
         check_if_image_exist(self.image)
         start_time = time.time()
         
-        self.image = grayscale_single_channel(self.image)
+        # self.image = grayscale_single_channel(self.image)
         self.image = laplace_opt(self.image)
         
         # update page
         self.image_src.src_base64 = self.to_base64(self.image)
         self.image_src.update()
-        self.add_time_record("Sharpen Laplace", time.time() - start_time)
+        self.add_time_record("Sharpen Laplace Manually", time.time() - start_time)
     
     
     def build_ui(self):
@@ -994,7 +1002,7 @@ class ImageProcessorApp:
                                 on_click=self.sharpen_robert,
                             ),
                             ft.MenuItemButton(
-                                content=ft.Text("Sebel Opt"),
+                                content=ft.Text("Sobel Opt"),
                                 leading=ft.Icon(ft.icons.FILTER_2),
                                 close_on_click=False,
                                 style=ft.ButtonStyle(
@@ -1199,7 +1207,7 @@ class ImageProcessorApp:
                                 on_click=self.sharpen_robert_m,
                             ),
                             ft.MenuItemButton(
-                                content=ft.Text("Sebel Opt"),
+                                content=ft.Text("Sobel Opt"),
                                 leading=ft.Icon(ft.icons.FILTER_2),
                                 close_on_click=False,
                                 style=ft.ButtonStyle(
