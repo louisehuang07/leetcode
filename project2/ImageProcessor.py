@@ -6,6 +6,8 @@ import base64
 import time  # Import time module to measure execution time
 from image_operator import *
 from matplotlib import pyplot as plt
+from skimage.filters import threshold_otsu
+
 
 class ImageProcessorApp:
     def __init__(self, page: ft.Page):
@@ -33,6 +35,829 @@ class ImageProcessorApp:
         self.file_picker = ft.FilePicker(on_result=self.on_file_selected)
         self.page.overlay.append(self.file_picker)
     
+    def build_ui(self):
+        appbar=ft.AppBar(
+        leading=ft.Icon(ft.icons.PALETTE),
+        leading_width=40,
+        title=ft.Text(value="Image Viewer for Machine Vision.",
+                      style=ft.TextStyle(font_family="Consolas")),
+        
+        center_title=False,
+        bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100},
+        actions=[
+            ft.IconButton(ft.icons.PERM_MEDIA, on_click=lambda e: self.file_picker.pick_files(
+                                allow_multiple=False,
+                                file_type=ft.FilePickerFileType.IMAGE,  # icons.FILE_OPEN_ROUNDED
+                            )),
+            ft.IconButton(ft.icons.CLOSE,on_click=lambda e: self.page.window_close()),
+        ]
+    )
+        # Menu bar
+        menubar = ft.MenuBar(
+            expand=True,
+            controls=[
+                ft.SubmenuButton(
+                    content=ft.Text("Edit"),leading=ft.Icon(ft.icons.EDIT),
+                    controls=[
+                        ft.MenuItemButton(
+                        content=ft.Text("Rotate 90°"),
+                        leading=ft.Icon(ft.icons.CROP_ROTATE_OUTLINED),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.rotate_image,
+                    ),
+                    ft.SubmenuButton(
+                        content=ft.Text("Zoom"),
+                        leading=ft.Icon(ft.icons.ZOOM_IN_MAP),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        controls=[
+                            ft.MenuItemButton(
+                                content=ft.Text("+10%"),
+                                leading=ft.Icon(ft.icons.ZOOM_IN_MAP),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.scale_up,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("-10%"),
+                                leading=ft.Icon(ft.icons.ZOOM_OUT_MAP),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.scale_down,
+                            ),
+                        ],
+                    ),
+                    ft.MenuItemButton(
+                        content=ft.Text("Invert"),
+                        leading=ft.Icon(ft.icons.INVERT_COLORS_SHARP),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.invert_colors,
+                    ),
+                    ft.MenuItemButton(
+                        content=ft.Text("Grayscale"),
+                        leading=ft.Icon(ft.icons.COLOR_LENS_OUTLINED),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.grayscale_image,
+                    ),
+                    ft.MenuItemButton(
+                        content=ft.Text("Reset"),
+                        # leading=ft.Icon(ft.icons.RESET_TV_ROUNDED),
+                        leading=ft.Icon(ft.icons.EDIT_OFF),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.reset_to_original,
+                    )
+                    ],
+                ),
+                ft.SubmenuButton(
+                    content=ft.Text("Edit"),
+                    leading=ft.Icon(ft.icons.NUMBERS),
+                    controls=[
+                        ft.MenuItemButton(
+                        content=ft.Text("Rotate 90°"),
+                        leading=ft.Icon(ft.icons.CROP_ROTATE_OUTLINED),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.rotate_image_,
+                    ),
+                    ft.SubmenuButton(
+                        content=ft.Text("Zoom"),
+                        leading=ft.Icon(ft.icons.ZOOM_OUT_MAP),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        controls=[
+                            ft.MenuItemButton(
+                                content=ft.Text("+10%"),
+                                leading=ft.Icon(ft.icons.ZOOM_IN_MAP),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.scale_up_,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("-10%"),
+                                leading=ft.Icon(ft.icons.ZOOM_OUT_MAP),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.scale_down_,
+                            ),
+                        ],
+                    ),
+                    ft.MenuItemButton(
+                        content=ft.Text("Invert"),
+                        leading=ft.Icon(ft.icons.INVERT_COLORS_SHARP),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.invert_colors_,
+                    ),
+                    ft.MenuItemButton(
+                        content=ft.Text("Grayscale"),
+                        leading=ft.Icon(ft.icons.COLOR_LENS_OUTLINED),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.grayscale_image_,
+                    ),
+                    ft.MenuItemButton(
+                        content=ft.Text("Reset"),
+                        leading=ft.Icon(ft.icons.FILTER_ALT_OFF),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.reset_to_original,
+                    )
+                    ],
+                ),
+                # Filter 
+                ft.SubmenuButton(
+                    content=ft.Text("Filter"),
+                    leading=ft.Icon(ft.icons.FILTER_ALT),
+                    controls=[
+                    ft.SubmenuButton(   
+                        content=ft.Text("Bilinear Interpolation"),
+                        leading=ft.Icon(ft.icons.DATA_USAGE_OUTLINED),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        controls=[
+                            ft.MenuItemButton(
+                                content=ft.Text("Zoom In"),
+                                leading=ft.Icon(ft.icons.ZOOM_IN_MAP),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.scale_up,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Shear Up"),
+                                leading=ft.Icon(ft.icons.ARROW_UPWARD),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.shear_1_up,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Shear Down"),
+                                leading=ft.Icon(ft.icons.ARROW_DOWNWARD),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.shear_1_down,
+                            ),
+                            # ft.MenuItemButton(
+                            #     content=ft.Text("Shear_2_UP"),
+                            #     leading=ft.Icon(ft.icons.CONTENT_CUT),
+                            #     close_on_click=False,
+                            #     style=ft.ButtonStyle(
+                            #         bgcolor={
+                            #             ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                            #         }
+                            #     ),
+                            #     on_click=self.shear_2_up,
+                            # ),
+                            # ft.MenuItemButton(
+                            #     content=ft.Text("Shear_2_DOWN"),
+                            #     leading=ft.Icon(ft.icons.CONTENT_CUT),
+                            #     close_on_click=False,
+                            #     style=ft.ButtonStyle(
+                            #         bgcolor={
+                            #             ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                            #         }
+                            #     ),
+                            #     on_click=self.shear_2_down,
+                            # ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Perspective"),
+                                leading=ft.Icon(ft.icons.GRID_ON),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.bilinear_perspective,
+                            ),
+                        ],
+                    ),
+                    ft.SubmenuButton(
+                        content=ft.Text("Histogram"),
+                        leading=ft.Icon(ft.icons.BAR_CHART),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        controls=[
+                            ft.MenuItemButton(
+                                content=ft.Text("Histogram Plot"),
+                                leading=ft.Icon(ft.icons.BAR_CHART),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.histogram_plot,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Histogram Equalization"),
+                                leading=ft.Icon(ft.icons.CONTRAST_OUTLINED),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.histogram_equalization,
+                            ),
+                        ],
+                    ),
+                    ft.SubmenuButton(
+                        content=ft.Text("Add Noise"),
+                        leading=ft.Icon(ft.icons.NOW_WALLPAPER),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        controls=[
+                            ft.MenuItemButton(
+                                content=ft.Text("Gaussian"),
+                                leading=ft.Icon(ft.icons.GAMEPAD),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.add_gaussian,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Salt Pepper"),
+                                leading=ft.Icon(ft.icons.VOICEMAIL),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.add_salt_pepper,
+                            ),
+                        ],
+                    ),
+                    ft.MenuItemButton(
+                        content=ft.Text("Median Filter"),
+                        leading=ft.Icon(ft.icons.FILTER_B_AND_W),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.median,
+                    ),
+                    ft.SubmenuButton(
+                        content=ft.Text("Sharpen"),
+                        leading=ft.Icon(ft.icons.BRIGHTNESS_3_OUTLINED),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        controls=[
+                            ft.MenuItemButton(
+                                content=ft.Text("Robert Opt"),
+                                leading=ft.Icon(ft.icons.FILTER_1),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.sharpen_robert,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Sobel Opt"),
+                                leading=ft.Icon(ft.icons.FILTER_2),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.sharpen_sobel,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Laplace Opt"),
+                                leading=ft.Icon(ft.icons.FILTER_3),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.sharpen_laplace,
+                            ),
+                        ],
+                    ),
+                    ft.SubmenuButton(
+                        content=ft.Text("Frequency Domain"),
+                        leading=ft.Icon(ft.icons.WINDOW),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        controls=[
+                            
+                            ft.MenuItemButton(
+                                content=ft.Text("Ideal High-pass Filter"),
+                                leading=ft.Icon(ft.icons.TRENDING_UP),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.frequency_high_pass_ideal,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Butterworth High-pass Filter"),
+                                leading=ft.Icon(ft.icons.TRENDING_UP),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.frequency_high_pass_butterworth,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Gaussian High-pass Filter"),
+                                leading=ft.Icon(ft.icons.TRENDING_UP),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.frequency_high_pass_gaussian,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Ideal Low-pass Filter"),
+                                leading=ft.Icon(ft.icons.TRENDING_DOWN),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.frequency_low_pass_ideal,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Butterworth Low-pass Filter"),
+                                leading=ft.Icon(ft.icons.TRENDING_DOWN),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.frequency_low_pass_butterworth,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Gaussian Low-pass Filter"),
+                                leading=ft.Icon(ft.icons.TRENDING_DOWN),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.frequency_low_pass_gaussian,
+                            ),
+                        ],
+                    ),
+                    ft.MenuItemButton(
+                        content=ft.Text("Reset"),
+                        leading=ft.Icon(ft.icons.FILTER_ALT_OFF),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.reset_to_original,
+                    )
+                    ],
+                ),
+                # Filter 
+                ft.SubmenuButton(
+                    content=ft.Text("Filter"),
+                    leading=ft.Icon(ft.icons.NUMBERS),
+                    controls=[
+                    ft.SubmenuButton(   
+                        content=ft.Text("Bilinear Interpolation"),
+                        leading=ft.Icon(ft.icons.DATA_USAGE_OUTLINED),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        controls=[
+                            ft.MenuItemButton(
+                                content=ft.Text("Zoom In"),
+                                leading=ft.Icon(ft.icons.ZOOM_IN_MAP),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.scale_up_,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Shear Up"),
+                                leading=ft.Icon(ft.icons.ARROW_UPWARD),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.shear_up_m,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Shear Down"),
+                                leading=ft.Icon(ft.icons.ARROW_DOWNWARD),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.shear_down_m,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Perspective"),
+                                leading=ft.Icon(ft.icons.GRID_ON),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.bilinear_perspective_m,
+                            ),
+                        ],
+                    ),
+                    ft.MenuItemButton(
+                        content=ft.Text("Histogram"),
+                        leading=ft.Icon(ft.icons.BAR_CHART),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.histogram_m,
+                    ),
+                    ft.MenuItemButton(
+                        content=ft.Text("Median Filter"),
+                        leading=ft.Icon(ft.icons.FILTER_B_AND_W),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.median_m,
+                    ),
+                    ft.SubmenuButton(
+                        content=ft.Text("Sharpen"),
+                        leading=ft.Icon(ft.icons.BRIGHTNESS_3_OUTLINED),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        controls=[
+                            ft.MenuItemButton(
+                                content=ft.Text("Robert Opt"),
+                                leading=ft.Icon(ft.icons.FILTER_1),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.sharpen_robert_m,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Sobel Opt"),
+                                leading=ft.Icon(ft.icons.FILTER_2),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.sharpen_sobel_m,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("Laplace Opt"),
+                                leading=ft.Icon(ft.icons.FILTER_3),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.sharpen_laplace_m,
+                            ),
+                        ],
+                    ),
+                    # ft.SubmenuButton(
+                    #     content=ft.Text("Frequency Domain"),
+                    #     leading=ft.Icon(ft.icons.WAVES),
+                    #     style=ft.ButtonStyle(
+                    #         bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                    #     ),
+                    #     controls=[
+                    #         ft.MenuItemButton(
+                    #             content=ft.Text("High pass"),
+                    #             leading=ft.Icon(ft.icons.TRENDING_UP),
+                    #             close_on_click=False,
+                    #             style=ft.ButtonStyle(
+                    #                 bgcolor={
+                    #                     ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                    #                 }
+                    #             ),
+                    #             on_click=self.frequency_high_pass_m,
+                    #         ),
+                    #         ft.MenuItemButton(
+                    #             content=ft.Text("Low pass"),
+                    #             leading=ft.Icon(ft.icons.TRENDING_DOWN),
+                    #             close_on_click=False,
+                    #             style=ft.ButtonStyle(
+                    #                 bgcolor={
+                    #                     ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                    #                 }
+                    #             ),
+                    #             on_click=self.frequency_low_pass_m,
+                    #         ),
+                    #     ],
+                    # ),
+                    ft.MenuItemButton(
+                        content=ft.Text("Reset"),
+                        leading=ft.Icon(ft.icons.FILTER_ALT_OFF),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.reset_to_original,
+                    )
+                    ],
+                ),
+                # Segment
+                ft.SubmenuButton(
+                    content=ft.Text("Segment"),
+                    leading=ft.Icon(ft.icons.NUMBERS),
+                    controls=[
+                    # dual-threshold
+                    ft.MenuItemButton(
+                        content=ft.Text("Dual Threshold Segmentation"),
+                        leading=ft.Icon(ft.icons.DATA_THRESHOLDING),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.dual_threshold_segmentation,
+                    ),
+                    # region-growing
+                    ft.MenuItemButton(
+                        content=ft.Text("Region Growing Segmentation"),
+                        leading=ft.Icon(ft.icons.KEYBOARD_DOUBLE_ARROW_UP),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.region_growing,
+                    ),
+                    # otsu 
+                    ft.MenuItemButton(
+                        content=ft.Text("otsu Segmentation"),
+                        leading=ft.Icon(ft.icons.FORMAT_QUOTE),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.otsu_segmentation,
+                    ),
+                    # watershed
+                    ft.MenuItemButton(
+                        content=ft.Text("Watershed Segmentation"),
+                        leading=ft.Icon(ft.icons.WATER),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.watershed_segmentation,
+                    ),
+                    
+                    ft.MenuItemButton(
+                        content=ft.Text("Reset"),
+                        leading=ft.Icon(ft.icons.FILTER_ALT_OFF),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.reset_to_original,
+                    )
+                    ],
+                ),
+            ],
+        )
+
+        # Layout
+        image_row = ft.Column(
+            [
+                ft.Row([self.image_src], alignment=ft.MainAxisAlignment.CENTER),
+                ft.Row([self.time_display], alignment=ft.MainAxisAlignment.CENTER),
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+        )
+
+        self.page.add(appbar)
+        self.page.add(ft.Row([menubar]))
+        self.page.add(image_row)
+    
+    # 1. Dual Threshold
+    def dual_threshold_segmentation(self,e):
+        check_if_image_exist(self.image)
+        start_time = time.time()
+        low_thresh = 190
+        high_thresh = 255
+        image = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2GRAY)
+        
+        # segmented = np.zeros_like(image, dtype=np.uint8)
+        # segmented[(image >= low_thresh) & (image <= high_thresh)] = 255
+
+        # # make sure output image is 0 or 255
+        # segmented = (segmented > 0).astype(np.uint8) * 255  
+
+        # # broadcast
+        # result = cv2.bitwise_and(image, segmented)  
+        
+        _, thresholded_img = cv2.threshold(image, low_thresh, high_thresh, cv2.THRESH_BINARY)
+ 
+        # images_combined = np.hstack((image, thresholded_img))
+        result = cv2.bitwise_and(image, thresholded_img)  
+
+        # return nose_mask
+        self.image_src.src_base64 = self.to_base64(result)
+        self.image_src.update()
+        self.add_time_record("Dual Threshold Segmentation", time.time() - start_time)
+
+    # 2. Region_Growing (blimp = 748, 642)
+    def region_growing(self,e):
+        # image, seed_point, threshold=15
+        check_if_image_exist(self.image)
+        start_time = time.time()
+
+        gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+
+        # size of the grayscale
+        h, w = gray.shape
+        threshold = 85
+
+        # output image
+        outimg  = np.zeros_like(gray, dtype=np.uint8)
+
+        # seed point, starting point of growth
+        seed = (h//2, w//2)   # half of the height and width
+
+        # Gray value of the seed point
+        seed_value = gray[seed]
+        seed_points  = [seed]
+
+        # processed mark
+        processed = np.zeros_like(gray, dtype=np.bool_) 
+
+
+        while seed_points :
+            # current seed point
+            x, y = seed_points .pop(0)
+
+            processed[x, y] = True
+            outimg[x, y] = 255  
+
+
+            for xn, yn in get8n(x, y, gray.shape):
+                if not processed[xn, yn]:  # if the neighbors have not been processed
+                    # if this is similar
+                    if abs(int(gray[xn, yn]) - int(seed_value)) <= threshold:
+                        seed_points.append((xn, yn))  # add to seed list
+                    processed[xn, yn] = True  # mark as processed
+        
+        # make sure output image is 0 or 255
+        outimg = (outimg > 0).astype(np.uint8) * 255  
+
+        # broadcast
+        result = cv2.bitwise_and(gray, outimg)  
+
+        # outimg = outimg * gray
+        # return mask
+        self.image_src.src_base64 = self.to_base64(result)
+        self.image_src.update()
+        self.add_time_record("Region Growing Segmentation", time.time() - start_time)
+
+    # 3. Otsu 
+    def otsu_segmentation(self,e):
+        check_if_image_exist(self.image)
+        start_time = time.time()
+
+        gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+        thresh = threshold_otsu(gray)
+        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    
+
+        # make sure output image is 0 or 255
+        binary = (binary > 0).astype(np.uint8) * 255  
+
+        # broadcast
+        result = cv2.bitwise_and(gray, binary)  
+
+        self.image_src.src_base64 = self.to_base64(result)
+        self.image_src.update()
+        self.add_time_record("OTSU Segmentation", time.time() - start_time)
+
+    # 4. Watershed
+    def watershed_segmentation(self,e):
+        check_if_image_exist(self.image)
+        start_time = time.time()
+        image = self.image
+        gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        
+        equalized = cv2.equalizeHist(blurred)
+        
+        thresh = cv2.adaptiveThreshold(equalized, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+                                    cv2.THRESH_BINARY_INV, 7, 2)
+        
+        kernel = np.ones((2, 3), np.uint8)
+        opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=2)
+        
+        sure_bg = cv2.dilate(opening, kernel, iterations=3)
+        
+        dist_transform = cv2.distanceTransform(opening, cv2.DIST_L2, 5)
+        ret, sure_fg = cv2.threshold(dist_transform, 0.001 * dist_transform.max(), 255, 0)
+        
+        sure_fg = np.uint8(sure_fg)
+        unknown = cv2.subtract(sure_bg, sure_fg)
+        
+        ret, markers = cv2.connectedComponents(sure_fg)
+        
+        markers = markers + 1
+        
+        markers[unknown == 255] = 0
+        markers = cv2.watershed(self.image, markers)
+        image[markers == -1] = [255, 0, 0]
+
+        # make sure output image is 0 or 255
+        binary = (markers > 0).astype(np.uint8) * 255  
+
+        # broadcast
+        result = cv2.bitwise_and(gray, binary)  
+
+        # return segmentation
+        self.image_src.src_base64 = self.to_base64(result)
+        self.image_src.update()
+        self.add_time_record("Watershed Segmentation", time.time() - start_time)
+
     
     def to_base64(self, image):
         base64_image = cv2.imencode('.png', image)[1]
@@ -458,7 +1283,6 @@ class ImageProcessorApp:
         return np.abs(img_filtered)
 
 
-
     def frequency_low_pass_ideal(self, e):
         check_if_image_exist(self.image)
         start_time = time.time()
@@ -665,626 +1489,5 @@ class ImageProcessorApp:
         self.add_time_record("Sharpen Laplace Manually", time.time() - start_time)
     
     
-    def build_ui(self):
-        appbar=ft.AppBar(
-        leading=ft.Icon(ft.icons.PALETTE),
-        leading_width=40,
-        title=ft.Text(value="Image Viewer for Machine Vision.",
-                      style=ft.TextStyle(font_family="Consolas")),
-        
-        center_title=False,
-        bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100},
-        actions=[
-            ft.IconButton(ft.icons.PERM_MEDIA, on_click=lambda e: self.file_picker.pick_files(
-                                allow_multiple=False,
-                                file_type=ft.FilePickerFileType.IMAGE,  # icons.FILE_OPEN_ROUNDED
-                            )),
-            ft.IconButton(ft.icons.CLOSE,on_click=lambda e: self.page.window_close()),
-        ]
-    )
-        # Menu bar
-        menubar = ft.MenuBar(
-            expand=True,
-            controls=[
-                ft.SubmenuButton(
-                    content=ft.Text("Edit"),leading=ft.Icon(ft.icons.EDIT),
-                    controls=[
-                        ft.MenuItemButton(
-                        content=ft.Text("Rotate 90°"),
-                        leading=ft.Icon(ft.icons.CROP_ROTATE_OUTLINED),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        close_on_click=False,
-                        on_click=self.rotate_image,
-                    ),
-                    ft.SubmenuButton(
-                        content=ft.Text("Zoom"),
-                        leading=ft.Icon(ft.icons.ZOOM_IN_MAP),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        controls=[
-                            ft.MenuItemButton(
-                                content=ft.Text("+10%"),
-                                leading=ft.Icon(ft.icons.ZOOM_IN_MAP),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.scale_up,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("-10%"),
-                                leading=ft.Icon(ft.icons.ZOOM_OUT_MAP),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.scale_down,
-                            ),
-                        ],
-                    ),
-                    ft.MenuItemButton(
-                        content=ft.Text("Invert"),
-                        leading=ft.Icon(ft.icons.INVERT_COLORS_SHARP),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        close_on_click=False,
-                        on_click=self.invert_colors,
-                    ),
-                    ft.MenuItemButton(
-                        content=ft.Text("Grayscale"),
-                        leading=ft.Icon(ft.icons.COLOR_LENS_OUTLINED),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        close_on_click=False,
-                        on_click=self.grayscale_image,
-                    ),
-                    ft.MenuItemButton(
-                        content=ft.Text("Reset"),
-                        # leading=ft.Icon(ft.icons.RESET_TV_ROUNDED),
-                        leading=ft.Icon(ft.icons.EDIT_OFF),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        close_on_click=False,
-                        on_click=self.reset_to_original,
-                    )
-                    ],
-                ),
-                ft.SubmenuButton(
-                    content=ft.Text("Edit"),
-                    leading=ft.Icon(ft.icons.NUMBERS),
-                    controls=[
-                        ft.MenuItemButton(
-                        content=ft.Text("Rotate 90°"),
-                        leading=ft.Icon(ft.icons.CROP_ROTATE_OUTLINED),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        close_on_click=False,
-                        on_click=self.rotate_image_,
-                    ),
-                    ft.SubmenuButton(
-                        content=ft.Text("Zoom"),
-                        leading=ft.Icon(ft.icons.ZOOM_OUT_MAP),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        controls=[
-                            ft.MenuItemButton(
-                                content=ft.Text("+10%"),
-                                leading=ft.Icon(ft.icons.ZOOM_IN_MAP),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.scale_up_,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("-10%"),
-                                leading=ft.Icon(ft.icons.ZOOM_OUT_MAP),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.scale_down_,
-                            ),
-                        ],
-                    ),
-                    ft.MenuItemButton(
-                        content=ft.Text("Invert"),
-                        leading=ft.Icon(ft.icons.INVERT_COLORS_SHARP),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        close_on_click=False,
-                        on_click=self.invert_colors_,
-                    ),
-                    ft.MenuItemButton(
-                        content=ft.Text("Grayscale"),
-                        leading=ft.Icon(ft.icons.COLOR_LENS_OUTLINED),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        close_on_click=False,
-                        on_click=self.grayscale_image_,
-                    ),
-                    ft.MenuItemButton(
-                        content=ft.Text("Reset"),
-                        leading=ft.Icon(ft.icons.FILTER_ALT_OFF),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        close_on_click=False,
-                        on_click=self.reset_to_original,
-                    )
-                    ],
-                ),
-                # TODO 
-                ft.SubmenuButton(
-                    content=ft.Text("Filter"),
-                    leading=ft.Icon(ft.icons.FILTER_ALT),
-                    controls=[
-                    ft.SubmenuButton(   
-                        content=ft.Text("Bilinear Interpolation"),
-                        leading=ft.Icon(ft.icons.DATA_USAGE_OUTLINED),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        controls=[
-                            ft.MenuItemButton(
-                                content=ft.Text("Zoom In"),
-                                leading=ft.Icon(ft.icons.ZOOM_IN_MAP),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.scale_up,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Shear Up"),
-                                leading=ft.Icon(ft.icons.ARROW_UPWARD),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.shear_1_up,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Shear Down"),
-                                leading=ft.Icon(ft.icons.ARROW_DOWNWARD),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.shear_1_down,
-                            ),
-                            # ft.MenuItemButton(
-                            #     content=ft.Text("Shear_2_UP"),
-                            #     leading=ft.Icon(ft.icons.CONTENT_CUT),
-                            #     close_on_click=False,
-                            #     style=ft.ButtonStyle(
-                            #         bgcolor={
-                            #             ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                            #         }
-                            #     ),
-                            #     on_click=self.shear_2_up,
-                            # ),
-                            # ft.MenuItemButton(
-                            #     content=ft.Text("Shear_2_DOWN"),
-                            #     leading=ft.Icon(ft.icons.CONTENT_CUT),
-                            #     close_on_click=False,
-                            #     style=ft.ButtonStyle(
-                            #         bgcolor={
-                            #             ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                            #         }
-                            #     ),
-                            #     on_click=self.shear_2_down,
-                            # ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Perspective"),
-                                leading=ft.Icon(ft.icons.GRID_ON),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.bilinear_perspective,
-                            ),
-                        ],
-                    ),
-                    ft.SubmenuButton(
-                        content=ft.Text("Histogram"),
-                        leading=ft.Icon(ft.icons.BAR_CHART),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        controls=[
-                            ft.MenuItemButton(
-                                content=ft.Text("Histogram Plot"),
-                                leading=ft.Icon(ft.icons.BAR_CHART),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.histogram_plot,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Histogram Equalization"),
-                                leading=ft.Icon(ft.icons.CONTRAST_OUTLINED),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.histogram_equalization,
-                            ),
-                        ],
-                    ),
-                    ft.SubmenuButton(
-                        content=ft.Text("Add Noise"),
-                        leading=ft.Icon(ft.icons.NOW_WALLPAPER),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        controls=[
-                            ft.MenuItemButton(
-                                content=ft.Text("Gaussian"),
-                                leading=ft.Icon(ft.icons.GAMEPAD),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.add_gaussian,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Salt Pepper"),
-                                leading=ft.Icon(ft.icons.VOICEMAIL),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.add_salt_pepper,
-                            ),
-                        ],
-                    ),
-                    ft.MenuItemButton(
-                        content=ft.Text("Median Filter"),
-                        leading=ft.Icon(ft.icons.FILTER_B_AND_W),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        close_on_click=False,
-                        on_click=self.median,
-                    ),
-                    ft.SubmenuButton(
-                        content=ft.Text("Sharpen"),
-                        leading=ft.Icon(ft.icons.BRIGHTNESS_3_OUTLINED),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        controls=[
-                            ft.MenuItemButton(
-                                content=ft.Text("Robert Opt"),
-                                leading=ft.Icon(ft.icons.FILTER_1),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.sharpen_robert,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Sobel Opt"),
-                                leading=ft.Icon(ft.icons.FILTER_2),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.sharpen_sobel,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Laplace Opt"),
-                                leading=ft.Icon(ft.icons.FILTER_3),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.sharpen_laplace,
-                            ),
-                        ],
-                    ),
-                    ft.SubmenuButton(
-                        content=ft.Text("Frequency Domain"),
-                        leading=ft.Icon(ft.icons.WINDOW),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        controls=[
-                            
-                            ft.MenuItemButton(
-                                content=ft.Text("Ideal High-pass Filter"),
-                                leading=ft.Icon(ft.icons.TRENDING_UP),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.frequency_high_pass_ideal,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Butterworth High-pass Filter"),
-                                leading=ft.Icon(ft.icons.TRENDING_UP),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.frequency_high_pass_butterworth,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Gaussian High-pass Filter"),
-                                leading=ft.Icon(ft.icons.TRENDING_UP),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.frequency_high_pass_gaussian,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Ideal Low-pass Filter"),
-                                leading=ft.Icon(ft.icons.TRENDING_DOWN),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.frequency_low_pass_ideal,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Butterworth Low-pass Filter"),
-                                leading=ft.Icon(ft.icons.TRENDING_DOWN),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.frequency_low_pass_butterworth,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Gaussian Low-pass Filter"),
-                                leading=ft.Icon(ft.icons.TRENDING_DOWN),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.frequency_low_pass_gaussian,
-                            ),
-                        ],
-                    ),
-                    ft.MenuItemButton(
-                        content=ft.Text("Reset"),
-                        leading=ft.Icon(ft.icons.FILTER_ALT_OFF),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        close_on_click=False,
-                        on_click=self.reset_to_original,
-                    )
-                    ],
-                ),
-                # TODO 
-                ft.SubmenuButton(
-                    content=ft.Text("Filter"),
-                    leading=ft.Icon(ft.icons.NUMBERS),
-                    controls=[
-                    ft.SubmenuButton(   
-                        content=ft.Text("Bilinear Interpolation"),
-                        leading=ft.Icon(ft.icons.DATA_USAGE_OUTLINED),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        controls=[
-                            ft.MenuItemButton(
-                                content=ft.Text("Zoom In"),
-                                leading=ft.Icon(ft.icons.ZOOM_IN_MAP),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.scale_up_,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Shear Up"),
-                                leading=ft.Icon(ft.icons.ARROW_UPWARD),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.shear_up_m,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Shear Down"),
-                                leading=ft.Icon(ft.icons.ARROW_DOWNWARD),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.shear_down_m,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Perspective"),
-                                leading=ft.Icon(ft.icons.GRID_ON),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.bilinear_perspective_m,
-                            ),
-                        ],
-                    ),
-                    ft.MenuItemButton(
-                        content=ft.Text("Histogram"),
-                        leading=ft.Icon(ft.icons.BAR_CHART),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        close_on_click=False,
-                        on_click=self.histogram_m,
-                    ),
-                    ft.MenuItemButton(
-                        content=ft.Text("Median Filter"),
-                        leading=ft.Icon(ft.icons.FILTER_B_AND_W),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        close_on_click=False,
-                        on_click=self.median_m,
-                    ),
-                    ft.SubmenuButton(
-                        content=ft.Text("Sharpen"),
-                        leading=ft.Icon(ft.icons.BRIGHTNESS_3_OUTLINED),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        controls=[
-                            ft.MenuItemButton(
-                                content=ft.Text("Robert Opt"),
-                                leading=ft.Icon(ft.icons.FILTER_1),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.sharpen_robert_m,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Sobel Opt"),
-                                leading=ft.Icon(ft.icons.FILTER_2),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.sharpen_sobel_m,
-                            ),
-                            ft.MenuItemButton(
-                                content=ft.Text("Laplace Opt"),
-                                leading=ft.Icon(ft.icons.FILTER_3),
-                                close_on_click=False,
-                                style=ft.ButtonStyle(
-                                    bgcolor={
-                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                                    }
-                                ),
-                                on_click=self.sharpen_laplace_m,
-                            ),
-                        ],
-                    ),
-                    # ft.SubmenuButton(
-                    #     content=ft.Text("Frequency Domain"),
-                    #     leading=ft.Icon(ft.icons.WAVES),
-                    #     style=ft.ButtonStyle(
-                    #         bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                    #     ),
-                    #     controls=[
-                    #         ft.MenuItemButton(
-                    #             content=ft.Text("High pass"),
-                    #             leading=ft.Icon(ft.icons.TRENDING_UP),
-                    #             close_on_click=False,
-                    #             style=ft.ButtonStyle(
-                    #                 bgcolor={
-                    #                     ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                    #                 }
-                    #             ),
-                    #             on_click=self.frequency_high_pass_m,
-                    #         ),
-                    #         ft.MenuItemButton(
-                    #             content=ft.Text("Low pass"),
-                    #             leading=ft.Icon(ft.icons.TRENDING_DOWN),
-                    #             close_on_click=False,
-                    #             style=ft.ButtonStyle(
-                    #                 bgcolor={
-                    #                     ft.ControlState.HOVERED: ft.colors.PURPLE_200
-                    #                 }
-                    #             ),
-                    #             on_click=self.frequency_low_pass_m,
-                    #         ),
-                    #     ],
-                    # ),
-                    ft.MenuItemButton(
-                        content=ft.Text("Reset"),
-                        leading=ft.Icon(ft.icons.FILTER_ALT_OFF),
-                        style=ft.ButtonStyle(
-                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
-                        ),
-                        close_on_click=False,
-                        on_click=self.reset_to_original,
-                    )
-                    ],
-                ),
-            ],
-        )
-
-        # Layout
-        image_row = ft.Column(
-            [
-                ft.Row([self.image_src], alignment=ft.MainAxisAlignment.CENTER),
-                ft.Row([self.time_display], alignment=ft.MainAxisAlignment.CENTER),
-            ],
-            alignment=ft.MainAxisAlignment.CENTER,
-        )
-
-        self.page.add(appbar)
-        self.page.add(ft.Row([menubar]))
-        self.page.add(image_row)
+    
 
