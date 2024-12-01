@@ -34,6 +34,8 @@ class ImageProcessorApp:
 
         self.file_picker = ft.FilePicker(on_result=self.on_file_selected)
         self.page.overlay.append(self.file_picker)
+        self.low_threshold = 113
+        self.high_threshold = 167
     
     def build_ui(self):
         appbar=ft.AppBar(
@@ -645,7 +647,7 @@ class ImageProcessorApp:
                 # Segment
                 ft.SubmenuButton(
                     content=ft.Text("Segment"),
-                    leading=ft.Icon(ft.icons.NUMBERS),
+                    leading=ft.Icon(ft.icons.CLOUD_CIRCLE_OUTLINED),
                     controls=[
                     # dual-threshold
                     ft.MenuItemButton(
@@ -719,9 +721,18 @@ class ImageProcessorApp:
     def dual_threshold_segmentation(self,e):
         check_if_image_exist(self.image)
         start_time = time.time()
-        low_thresh = 190
-        high_thresh = 255
-        image = cv2.cvtColor(self.original_image, cv2.COLOR_BGR2GRAY)
+
+        low_threshold = 100
+        high_threshold = 120
+
+        # return segmented_image
+        _, thresholded_img = cv2.threshold(self.image,low_threshold , high_threshold, cv2.THRESH_BINARY)
+ 
+        # images_combined = np.hstack((self.image, thresholded_img))
+        # low_thresh = 190
+        # high_thresh = 255
+        # gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+        # image = cv2.cvtColor(self.image, cv2.COLOR_BGR2RGB)
         
         # segmented = np.zeros_like(image, dtype=np.uint8)
         # segmented[(image >= low_thresh) & (image <= high_thresh)] = 255
@@ -730,15 +741,36 @@ class ImageProcessorApp:
         # segmented = (segmented > 0).astype(np.uint8) * 255  
 
         # # broadcast
-        # result = cv2.bitwise_and(image, segmented)  
-        
-        _, thresholded_img = cv2.threshold(image, low_thresh, high_thresh, cv2.THRESH_BINARY)
+        # result = cv2.bitwise_and(image, segmented)
+        #   
+        # # deblur
+        # blurred = cv2.GaussianBlur(self.image, (7, 7), 2)
+
+        # # generate mask
+        # mask = cv2.inRange(blurred, self.low_threshold, self.high_threshold)
+        # # mask_image = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
+
+        # # define kernel 
+        # # kernel = np.ones((60, 60), np.uint8)
+
+        # # open kernel
+        # kernel = np.ones((30, 30), np.uint8) 
+        # opened_image = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        # # opened_image_cv = cv2.cvtColor(opened_image, cv2.COLOR_BGR2RGB) 
+
+        # # mask for extract edge
+        # mask = opened_image.astype(np.uint8)
+
+        # # segment
+        # segmented_image = cv2.bitwise_and(self.image, self.image, mask=mask)
+        # segmented_image = cv2.cvtColor(segmented_image, cv2.COLOR_BGR2RGB) 
+        # _, thresholded_img = cv2.threshold(image, low_thresh, high_thresh, cv2.THRESH_BINARY)
  
-        # images_combined = np.hstack((image, thresholded_img))
-        result = cv2.bitwise_and(image, thresholded_img)  
+        # # images_combined = np.hstack((image, thresholded_img))
+        # result = cv2.bitwise_and(image, thresholded_img)  
 
         # return nose_mask
-        self.image_src.src_base64 = self.to_base64(result)
+        self.image_src.src_base64 = self.to_base64(thresholded_img)
         self.image_src.update()
         self.add_time_record("Dual Threshold Segmentation", time.time() - start_time)
 
@@ -807,7 +839,7 @@ class ImageProcessorApp:
 
         # make sure output image is 0 or 255
         binary = (binary > 0).astype(np.uint8) * 255  
-
+        binary = 255 - binary
         # broadcast
         result = cv2.bitwise_and(gray, binary)  
 
@@ -821,40 +853,113 @@ class ImageProcessorApp:
         start_time = time.time()
         image = self.image
         gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+
+        ret, binary_image = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        
-        equalized = cv2.equalizeHist(blurred)
-        
-        thresh = cv2.adaptiveThreshold(equalized, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
-                                    cv2.THRESH_BINARY_INV, 7, 2)
-        
-        kernel = np.ones((2, 3), np.uint8)
-        opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=2)
-        
-        sure_bg = cv2.dilate(opening, kernel, iterations=3)
-        
-        dist_transform = cv2.distanceTransform(opening, cv2.DIST_L2, 5)
-        ret, sure_fg = cv2.threshold(dist_transform, 0.001 * dist_transform.max(), 255, 0)
-        
-        sure_fg = np.uint8(sure_fg)
+        # deblur with open operator
+        kernel = np.ones((3, 3), np.uint8)
+        opened_image = cv2.morphologyEx(binary_image, cv2.MORPH_OPEN, kernel)
+
+        # distance transform 
+        dist_transform = cv2.distanceTransform(opened_image, cv2.DIST_L2, 5)
+
+        # normalization
+        ret, sure_fg = cv2.threshold(dist_transform, 0.6 * dist_transform.max(), 255, 0)
+
+        # get background
+        sure_bg = cv2.dilate(opened_image, kernel, iterations=3)
+        sure_bg_image = cv2.cvtColor(sure_bg, cv2.COLOR_BGR2RGB) 
+
+        # determine image type
+        sure_fg = sure_fg.astype(np.uint8)
+        sure_bg = sure_bg.astype(np.uint8)
+
+        # get unkonwn area
         unknown = cv2.subtract(sure_bg, sure_fg)
-        
+
+        # mark the front and background of image
         ret, markers = cv2.connectedComponents(sure_fg)
-        
+
+        # mark background as 0
         markers = markers + 1
-        
         markers[unknown == 255] = 0
-        markers = cv2.watershed(self.image, markers)
-        image[markers == -1] = [255, 0, 0]
 
-        # make sure output image is 0 or 255
-        binary = (markers > 0).astype(np.uint8) * 255  
+        # watershed
+        cv2.watershed(image, markers)
 
-        # broadcast
-        result = cv2.bitwise_and(gray, binary)  
+        # set background as black
+        image[markers == -1] = [0, 0, 0]
+        # equalized = cv2.equalizeHist(blurred)
+        
+        # thresh = cv2.adaptiveThreshold(equalized, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+        #                             cv2.THRESH_BINARY_INV, 7, 2)
+        
+        # kernel = np.ones((2, 3), np.uint8)
+        # opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=2)
+        
+        # sure_bg = cv2.dilate(opening, kernel, iterations=3)
+        
+        # dist_transform = cv2.distanceTransform(opening, cv2.DIST_L2, 5)
+        # ret, sure_fg = cv2.threshold(dist_transform, 0.001 * dist_transform.max(), 255, 0)
+        
+        # sure_fg = np.uint8(sure_fg)
+        # unknown = cv2.subtract(sure_bg, sure_fg)
+        
+        # ret, markers = cv2.connectedComponents(sure_fg)
+        
+        # markers = markers + 1
+        
+        # markers[unknown == 255] = 0
+        # markers = cv2.watershed(self.image, markers)
+        # image[markers == -1] = [255, 0, 0]
+
+        # # make sure output image is 0 or 255
+        # binary = (markers > 0).astype(np.uint8) * 255  
+
+        # # broadcast
+        # result = cv2.bitwise_and(gray, binary)  
+        # gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
+ 
+        # # 应用高斯模糊
+        # blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        
+        # # 使用直方图均衡化
+        # equalized = cv2.equalizeHist(blurred)
+        
+        # # 应用自适应阈值进行分割
+        # thresh = cv2.adaptiveThreshold(equalized, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+        #                             cv2.THRESH_BINARY_INV, 15, 1)
+        
+        # # 使用形态学变换去噪声
+        # kernel = np.ones((2, 3), np.uint8)
+        # opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=2)
+        
+        # # 确定背景区域
+        # sure_bg = cv2.dilate(opening, kernel, iterations=20)
+        
+        # # 寻找前景区域
+        # dist_transform = cv2.distanceTransform(opening, cv2.DIST_L2, 5)
+        # ret, sure_fg = cv2.threshold(dist_transform, 0.001 * dist_transform.max(), 255, 0)
+        
+        # # 寻找未知区域
+        # sure_fg = np.uint8(sure_fg)
+        # unknown = cv2.subtract(sure_bg, sure_fg)
+        
+        # # 标记标签
+        # ret, markers = cv2.connectedComponents(sure_fg)
+        
+        # # 增加1所有的背景区域变为0，以确保背景不是0, 而是1
+        # markers = markers + 1
+        
+        # # 用分水岭算法标记未知区域
+        # markers[unknown == 255] = 0
+        # markers = cv2.watershed(self.image, markers)
+        # self.image[markers == -1] = [255, 0, 0]
+        
 
         # return segmentation
-        self.image_src.src_base64 = self.to_base64(result)
+        self.image_src.src_base64 = self.to_base64(image)
         self.image_src.update()
         self.add_time_record("Watershed Segmentation", time.time() - start_time)
 
