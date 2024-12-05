@@ -1,6 +1,51 @@
 import math
 import numpy as np
+def get8n(x, y, shape):
+    """
+    get 8 coordinates of position (x, y)
+
+    paramaters: 
+        x (int): row
+        y (int): col
+        shape (tuple): image size (height, width)。
+
+    return:
+        neighbors (list): 8 邻域的坐标列表。
+    """
+    neighbors = []
+    for dx, dy in [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]:
+        xn, yn = x + dx, y + dy
+        if 0 <= xn < shape[0] and 0 <= yn < shape[1]:  # 排除越界点
+            neighbors.append((xn, yn))
+    return neighbors
+
+def hough_transformer(image):
+
+    return image
     
+
+def hough_transformer_(image):
+    
+    return image
+
+def erosion_and_diliation_operator(image):
+    
+    return image
+
+def erosion_and_diliation_operator_(image):
+    
+    return image
+
+def canny_operator(image):
+
+    return image
+
+
+def canny_operator_(image):
+    
+    return image
+
+
 def resize(original_image, scale_factor):
     "Resize to New Height and Width with Bilinear Neighbor Interpolation"
     new_width = int(original_image.shape[1] * scale_factor)
