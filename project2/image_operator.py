@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import cv2
 def get8n(x, y, shape):
     """
     get 8 coordinates of position (x, y)
@@ -19,31 +20,331 @@ def get8n(x, y, shape):
             neighbors.append((xn, yn))
     return neighbors
 
-def hough_transformer(image):
+def hough_transformer(image, threshold_number):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # dual threshold
+    mask = cv2.inRange(gray, 0, 255)
+    result = cv2.bitwise_and(gray, gray, mask=mask)
 
-    return image
+    # deblur with open operation
+    kernel = np.ones((3, 3), np.uint8)
+    opening = cv2.morphologyEx(result, cv2.MORPH_OPEN, kernel)
+
+    # Erosion
+    num_iterations = 2  # Erosion time
+    for i in range(num_iterations):
+        opening = cv2.erode(opening, kernel, iterations=1)
+
+    # Detect dege
+    edges = cv2.Canny(opening, 200, 250)
+
+    # Detect image
+    lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold_number, minLineLength=70, maxLineGap=30)
+    print('lines,\n',lines)
+    print('threshold_number,\n',threshold_number)
+
+    # convert
+    gray = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+
+    # If Detect image, show angles
+    if lines is not None:
+        previous_angle = None  # store angle
+        for line in lines:
+            x1, y1, x2, y2 = line[0]
+            cv2.line(gray, (x1, y1), (x2, y2), (0, 0, 255), 2)  # draw line
+            
+            # angle of line
+            angle = np.arctan2(y2 - y1, x2 - x1) * 180 / np.pi
+            
+            # only if angle > 1
+            if previous_angle is None or abs(angle - previous_angle) > 1:
+                # add label
+                cv2.putText(gray, f"Angle: {angle:.2f} degrees", (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                previous_angle = angle
+
+    return gray
     
 
-def hough_transformer_(image):
-    
-    return image
 
 def erosion_and_diliation_operator(image):
-    
-    return image
+    # kernel
+    kernel = np.ones((3,3), np.uint8) 
+
+    # erosion
+    erosion_result = cv2.erode(image,kernel, iterations = 1)
+
+    # kernel 2
+    kernel_2 = np.ones((3,3),np.uint8) 
+
+    # dilate
+    dilation_result = cv2.dilate(image, kernel_2, iterations = 1)
+
+    # extract edge
+    # return cv2.absdiff(dilation_result, erosion_result)
+    return dilation_result
 
 def erosion_and_diliation_operator_(image):
+    # convert to grayscale
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # kernel
+    kernel = np.ones((3,3), np.uint8) 
+
+    # erosion
+    erosion_result = erodision(image,kernel)
+
+    # kernel 2
+    kernel_2 = np.ones((3,3),np.uint8) 
+
+    # dilate
+    dilation_result = dilation(image, kernel_2)
+
+    # extract edge
+    image = np.abs(np.subtract(dilation_result, erosion_result))
     
     return image
 
-def canny_operator(image):
+def erodision(image, kernel):
+    # center of kernel
+    # kernel_center = tuple(x//2 for x in kernel.shape)
+    # kernel shape 
+    h, w = kernel.shape
+    # pad shape
+    pad_h, pad_w = h // 2, w // 2
+    # pad image with constant mode
+    print(image.shape)  # 查看图像形状
+    print(kernel.shape)  # 查看结构元素形状
 
-    return image
+    image_padded = np.pad(image, ((pad_h, pad_h), (pad_w, pad_w)), mode='constant', constant_values=0)
+    print('image_padded',image.shape)  # 查看图像形状
+    
+    # shape like origin image
+    output = np.zeros_like(image)
+
+    for i in range(image.shape[0]):
+        for j in range(image.shape[1]):
+            region = image_padded[i:i + h, j:j + w]
+            if np.all(region[kernel == 1] > 0): # if value within this region is not 0
+                output[i, j] = 255 # np.max(region)
+            else:
+                output[i, j] = 0  # black
+    return output
+
+def dilation(image, kernel):
+    # shape like origin image
+    output = np.zeros_like(image)
+    # pad image with constant mode
+    h, w = kernel.shape
+    pad_h, pad_w = h // 2, w // 2  
+    image_padded = np.pad(image, ((pad_h, pad_h), (pad_w, pad_w)), mode='constant', constant_values=0)
+    
+    for i in range(image.shape[0]):
+        for j in range(image.shape[1]):
+            region = image_padded[i:i + h, j:j + w]
+            if np.any(region[kernel == 1] > 0):
+                output[i, j] = 255 # np.max(region)
+            else:
+                output[i, j] = 0  # black
+    return output
+
+def canny_operator(image):
+    
+    return cv2.Canny(image, 120, 250)
 
 
 def canny_operator_(image):
+    # convert to grayscale
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # 1. smooth image
+    blurred_image = cv2.GaussianBlur(image, (5, 5), 0)
+
+    # gradient 
+    sobelx = cv2.Sobel(blurred_image, cv2.CV_64F, 1, 0, ksize=3)
+    sobely = cv2.Sobel(blurred_image, cv2.CV_64F, 0, 1, ksize=3)
+
+    # magnitude
+    gradient_magnitude = np.sqrt(sobelx**2 + sobely**2)
+
+    # direction
+    gradient_direction = np.arctan2(sobely, sobelx)
+
+    # non maximize suppression
+    nms_output = non_max_suppression(gradient_magnitude, gradient_direction)
     
-    return image
+    # dual threshold
+    low_threshold = 0.05 * np.max(nms_output)
+    high_threshold = 0.15 * np.max(nms_output)
+
+    strong_edges, weak_edges = double_threshold(nms_output, low_threshold, high_threshold)
+    final_edges = edge_tracking(strong_edges, weak_edges)
+
+    return final_edges
+
+def non_max_suppression(gradient_magnitude, gradient_direction):
+    h, w = gradient_magnitude.shape
+    nms = np.zeros((h, w), dtype=np.uint8)
+    
+    angle = gradient_direction * 180. / np.pi
+    angle[angle < 0] += 180
+    
+    for i in range(1, h-1):
+        for j in range(1, w-1):
+            try:
+                q = 255
+                r = 255
+                
+                # angle 0
+                if (0 <= angle[i,j] < 22.5) or (157.5 <= angle[i,j] <= 180):
+                    q = gradient_magnitude[i, j+1]
+                    r = gradient_magnitude[i, j-1]
+                # angle 45
+                elif (22.5 <= angle[i,j] < 67.5):
+                    q = gradient_magnitude[i+1, j-1]
+                    r = gradient_magnitude[i-1, j+1]
+                # angle 90
+                elif (67.5 <= angle[i,j] < 112.5):
+                    q = gradient_magnitude[i+1, j]
+                    r = gradient_magnitude[i-1, j]
+                # angle 135
+                elif (112.5 <= angle[i,j] < 157.5):
+                    q = gradient_magnitude[i-1, j-1]
+                    r = gradient_magnitude[i+1, j+1]
+
+                if (gradient_magnitude[i,j] >= q) and (gradient_magnitude[i,j] >= r):
+                    nms[i,j] = gradient_magnitude[i,j]
+                else:
+                    nms[i,j] = 0
+
+            except IndexError as e:  
+                pass
+                
+    return nms
+
+
+def double_threshold(nms, low_threshold, high_threshold):
+    strong_i, strong_j = np.where(nms >= high_threshold)
+    weak_i, weak_j = np.where((nms <= high_threshold) & (nms >= low_threshold))
+    strong_edges = np.zeros(nms.shape, dtype=np.uint8)
+    strong_edges[strong_i, strong_j] = 255
+    weak_edges = np.zeros(nms.shape, dtype=np.uint8)
+    weak_edges[weak_i, weak_j] = 255
+    return strong_edges, weak_edges
+
+def edge_tracking(strong_edges, weak_edges):
+    final_edges = strong_edges.copy()
+    def track(i, j):
+        if weak_edges[i, j] != 0:
+            final_edges[i, j] = 255
+            weak_edges[i, j] = 0
+            neighbors = [(i-1, j-1), (i-1, j), (i-1, j+1),
+                         (i, j-1),           (i, j+1),
+                         (i+1, j-1), (i+1, j), (i+1, j+1)]
+            
+            for ni, nj in neighbors:
+                if 0 <= ni < weak_edges.shape[0] and 0 <= nj < weak_edges.shape[1]:
+                    track(ni, nj)
+    for i in range(final_edges.shape[0]):
+        for j in range(final_edges.shape[1]):
+            if final_edges[i, j] == 255:
+                track(i, j)
+    return final_edges
+
+
+
+
+def apply_gaussian(image, kernel_size=5, sigma=1.4):
+    kernel = gaussian_filter(kernel_size, sigma)
+    return cv2.filter2D(image, -1, kernel)  
+def gaussian_filter(kernel_size=5, sigma=1.4):
+    """
+    Generate a gaussian filter
+    """
+    ax = np.linspace(-(kernel_size // 2), kernel_size // 2, kernel_size)
+    gauss = np.exp(-0.5 * np.square(ax) / np.square(sigma))
+    kernel = np.outer(gauss, gauss)
+    return kernel / np.sum(kernel)  
+
+def compute_gradient(image):
+    """
+    Compute gradient and direction of image
+    """
+    # Sobel for gradient
+    sobel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
+    sobel_y = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=np.float32)
+    
+    grad_x = cv2.filter2D(image, -1, sobel_x)
+    grad_y = cv2.filter2D(image, -1, sobel_y)
+    
+    grad_mag = np.sqrt(grad_x**2 + grad_y**2)  # magnitude
+    grad_dir = np.arctan2(grad_y, grad_x)  # direction
+    return grad_mag, grad_dir
+
+def non_maximum_suppression(grad_mag, grad_dir):
+    """
+    Conduct non maximum suppression
+    """
+    h, w = grad_mag.shape
+    suppressed = np.zeros_like(grad_mag)
+    
+    # gradient to angle
+    grad_dir = np.rad2deg(grad_dir) % 180
+    
+    for i in range(1, h-1):
+        for j in range(1, w-1):
+            angle = grad_dir[i, j]
+            mag = grad_mag[i, j]
+            
+            # compare
+            if (0 <= angle < 22.5) or (157.5 <= angle < 180):
+                # left and right
+                neighbors = [grad_mag[i, j-1], grad_mag[i, j+1]]
+            elif 22.5 <= angle < 67.5:
+                # rift_up and right_down
+                neighbors = [grad_mag[i-1, j-1], grad_mag[i+1, j+1]]
+            elif 67.5 <= angle < 112.5:
+                # up and down
+                neighbors = [grad_mag[i-1, j], grad_mag[i+1, j]]
+            else:
+                # rift_down and right_up
+                neighbors = [grad_mag[i-1, j+1], grad_mag[i+1, j-1]]
+            
+            # non maximum suppression
+            if mag >= max(neighbors):
+                suppressed[i, j] = mag
+            else:
+                suppressed[i, j] = 0
+    
+    return suppressed
+
+def double_thresholding(suppressed, low_threshold, high_threshold):
+    """
+    Double thresholding
+    """
+    strong_edges = suppressed > high_threshold
+    weak_edges = (suppressed >= low_threshold) & (suppressed <= high_threshold)
+    return strong_edges, weak_edges
+
+def edge_tracking(strong_edges, weak_edges):
+    """
+    Edge link to preserve meaningful edge
+    """
+    h, w = strong_edges.shape
+    edges = strong_edges.copy()
+
+    for i in range(1, h-1):
+        for j in range(1, w-1):
+            if weak_edges[i, j]:
+                # connect
+                if np.any(strong_edges[i-1:i+2, j-1:j+2]):
+                    edges[i, j] = 1  
+                else:
+                    edges[i, j] = 0  
+
+    return edges
+
+
 
 
 def resize(original_image, scale_factor):
