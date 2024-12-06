@@ -36,7 +36,9 @@ class ImageProcessorApp:
         self.page.overlay.append(self.file_picker)
         self.low_threshold = 113
         self.high_threshold = 167
-    
+        self.threshold_number = 100
+
+
     def build_ui(self):
         appbar=ft.AppBar(
         leading=ft.Icon(ft.icons.PALETTE),
@@ -58,6 +60,111 @@ class ImageProcessorApp:
         menubar = ft.MenuBar(
             expand=True,
             controls=[
+                # Edge
+                ft.SubmenuButton(
+                    content=ft.Text("Edge"),leading=ft.Icon(ft.icons.PEOPLE_ALT_OUTLINED),
+                    controls=[
+                        # erosion and dilation
+                        ft.MenuItemButton(
+                        content=ft.Text("Erosion & Dilation"),
+                        leading=ft.Icon(ft.icons.ATTACH_FILE_ROUNDED),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.erosion_and_dilation,
+                    ),
+                    # canny
+                        ft.MenuItemButton(
+                        content=ft.Text("Canny"),
+                        leading=ft.Icon(ft.icons.ACCOUNT_BALANCE_WALLET_OUTLINED),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.Canny_operator,
+                    ),
+                    # hough
+                    ft.SubmenuButton(
+                        content=ft.Text("Hough"),
+                        leading=ft.Icon(ft.icons.HOURGLASS_EMPTY),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        controls=[
+                            ft.MenuItemButton(
+                                content=ft.Text("+10"),
+                                leading=ft.Icon(ft.icons.ARROW_UPWARD_ROUNDED),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.threshold_up,
+                            ),
+                            ft.MenuItemButton(
+                                content=ft.Text("-10"),
+                                leading=ft.Icon(ft.icons.ARROW_DOWNWARD),
+                                close_on_click=False,
+                                style=ft.ButtonStyle(
+                                    bgcolor={
+                                        ft.ControlState.HOVERED: ft.colors.PURPLE_200
+                                    }
+                                ),
+                                on_click=self.threshold_down,
+                            ),
+                        ],
+                    ),
+                    ft.MenuItemButton(
+                        content=ft.Text("Reset"),
+                        # leading=ft.Icon(ft.icons.RESET_TV_ROUNDED),
+                        leading=ft.Icon(ft.icons.EDIT_OFF),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.reset_to_original,
+                    )
+                    ],
+                ),
+                # Edge
+                ft.SubmenuButton(
+                    content=ft.Text("Edge"),leading=ft.Icon(ft.icons.NUMBERS),
+                    controls=[
+                        # erosion and dilation
+                        ft.MenuItemButton(
+                        content=ft.Text("Erosion & Dilation"),
+                        leading=ft.Icon(ft.icons.ATTACH_FILE_ROUNDED),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.erosion_and_dilation_,
+                    ),
+                    # canny
+                        ft.MenuItemButton(
+                        content=ft.Text("Canny"),
+                        leading=ft.Icon(ft.icons.ACCOUNT_BALANCE_WALLET_OUTLINED),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.Canny_operator_,
+                    ),
+                    ft.MenuItemButton(
+                        content=ft.Text("Reset"),
+                        # leading=ft.Icon(ft.icons.RESET_TV_ROUNDED),
+                        leading=ft.Icon(ft.icons.EDIT_OFF),
+                        style=ft.ButtonStyle(
+                            bgcolor={ft.ControlState.HOVERED: ft.colors.GREEN_100}
+                        ),
+                        close_on_click=False,
+                        on_click=self.reset_to_original,
+                    )
+                    ],
+                ),
+                # Edit
                 ft.SubmenuButton(
                     content=ft.Text("Edit"),leading=ft.Icon(ft.icons.EDIT),
                     controls=[
@@ -131,6 +238,7 @@ class ImageProcessorApp:
                     )
                     ],
                 ),
+                # Edit
                 ft.SubmenuButton(
                     content=ft.Text("Edit"),
                     leading=ft.Icon(ft.icons.NUMBERS),
@@ -701,6 +809,7 @@ class ImageProcessorApp:
                     )
                     ],
                 ),
+                
             ],
         )
 
@@ -968,10 +1077,14 @@ class ImageProcessorApp:
         base64_image = cv2.imencode('.png', image)[1]
         return base64.b64encode(base64_image).decode('utf-8')
 
-    def add_time_record(self, operation_name, time_taken):
+    def add_time_record(self, operation_name, time_taken, number=None):
         if len(self.time_records) >= 1:
             self.time_records.pop(0)
-        self.time_records.append(f"{operation_name}: {time_taken:.4f} seconds")
+        if number is not None:
+            self.time_records.append(f"{operation_name}: {time_taken:.4f} seconds, Threshold: {number}")
+        else:
+            self.time_records.append(f"{operation_name}: {time_taken:.4f} seconds")
+
         time_text = "\n".join(self.time_records)
         self.time_display.value = f"Last 1 operation times:\n{time_text}"
         self.time_display.update()
@@ -1000,11 +1113,73 @@ class ImageProcessorApp:
         self.scale_factor += 0.1
         self.update_scaled_image()
 
-    def scale_down(self, e):
+    def scale_down(self):
         if self.scale_factor > 0.1:
             self.scale_factor -= 0.1
         self.update_scaled_image()
 
+    def update_threshold(self):
+        check_if_image_exist(self.image)
+        start_time = time.time()
+
+        image = hough_transformer(self.image, self.threshold_number)
+
+        self.image_src.src_base64 = self.to_base64(image)
+        self.image_src.update()
+        self.add_time_record("Hough Transform", time.time() - start_time, number=self.threshold_number)
+        
+    def erosion_and_dilation(self, e):
+        check_if_image_exist(self.image)
+        start_time = time.time()
+
+        image = erosion_and_diliation_operator(self.image)
+
+        self.image_src.src_base64 = self.to_base64(image)
+        self.image_src.update()
+        self.add_time_record("Erosion and Dilation", time.time() - start_time)
+
+    def erosion_and_dilation_(self, e):
+        check_if_image_exist(self.original_image)
+        start_time = time.time()
+
+        image = erosion_and_diliation_operator_(self.image)
+
+        self.image_src.src_base64 = self.to_base64(image)
+        self.image_src.update()
+        self.add_time_record("Erosion and Dilation (manual)", time.time() - start_time)
+
+    def Canny_operator(self, e):
+        check_if_image_exist(self.original_image)
+        start_time = time.time()
+
+        image = canny_operator(self.image)
+
+        self.image_src.src_base64 = self.to_base64(image)
+        self.image_src.update()
+        self.add_time_record("Canny", time.time() - start_time)
+
+    def Canny_operator_(self, e):
+        check_if_image_exist(self.original_image)
+        start_time = time.time()
+
+        image = canny_operator_(self.image)
+
+        self.image_src.src_base64 = self.to_base64(image)
+        self.image_src.update()
+        self.add_time_record("Canny (manual)", time.time() - start_time)
+
+    def threshold_up(self, e):
+        if self.threshold_number < 150:
+            self.threshold_number += 10
+        self.update_threshold()
+
+    def threshold_down(self, e):
+        if self.threshold_number > 50:
+            self.threshold_number -= 10
+        self.update_threshold()
+
+
+    
     def rotate_image(self, e):
         check_if_image_exist(self.image)
         start_time = time.time()
